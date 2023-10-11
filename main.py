@@ -15,7 +15,163 @@ import utils.tools_numba
 from distance_tools.insertion import insertion_pop
 from joblib import Parallel, delayed
 from numba import jit
+from tqdm import tqdm
 
+
+def test_python_partition_crossover(size, parent1, parent2, vect_nb_adj, vect_adj):
+    
+
+
+    component_id = np.zeros(size)
+
+
+    for x in range(size):
+        if(parent1[x] != parent2[x]):
+            component_id[x] = 0    
+        else:
+            component_id[x] = -1            
+            
+    
+    print(component_id)
+    component_number = 0;
+    S = np.zeros(size)
+    sizeS = -1
+    
+    
+    for x in range(size):
+        
+        
+        if(component_id[x] == 0):
+            
+            component_number += 1
+            component_id[x] = component_number
+
+            sizeS += 1
+            S[sizeS] = x 
+               
+
+                     
+                    
+        while(sizeS > -1):
+            
+            j = int(S[sizeS])
+            sizeS -= 1
+
+            
+            #print("j : " + str(j))
+            nb_adj = int(vect_nb_adj[j])
+            #print("nb_adj : " + str(nb_adj))
+
+            
+            for k in range(nb_adj):
+                
+                b = int(vect_adj[j, k])
+                
+            
+                if(component_id[b] == 0):
+                        
+                    component_id[b] = component_number
+                        
+                    sizeS += 1
+                    S[sizeS] = b 
+
+            
+
+
+    return component_id
+                                
+                                
+
+def verificationPython(component_id, vect_adj, nb_adj):
+    
+    maxComponent = np.max(component_id)
+    print("maxComponent " + str(maxComponent))
+    
+    pb= False
+    for i in range(component_id.shape[0]):
+        
+        if(component_id[i] != -1):
+            
+            #print("i :" + str(i))
+        
+            str_ = "neigh :"
+        
+            for j in range(int(nb_adj[i])):
+            
+                neigh = int(vect_adj[i,j])
+            
+                if(component_id[neigh] != -1):
+                    str_ += str(neigh) + "-" + str(component_id[neigh]) + "__"
+            
+                    if(component_id[neigh] != component_id[i]):
+                
+                        pb = True
+                        
+    if pb:
+        print("pb extraction components")
+        
+
+
+
+def verification_generation_child(component_id, child, parent1, parent2, vect_adj, nb_adj, size, Q):
+    
+    new_child = np.zeros((size))
+    maxComponent = np.max(component_id)
+    
+    for x in range(size):
+        if(parent1[x] == parent2[x]):
+            new_child[x] = parent1[x]
+            if(component_id[x] != -1):
+                
+                print("pbpbpb component")
+
+    
+    G1 = np.zeros((size))
+    G2 = np.zeros((size))  
+    
+    for l in range(maxComponent):
+        
+        
+        for x in range(size):
+            
+            if(component_id[x] == -1 or component_id[x] == l+1):
+                
+                
+                for y in range(x+1):
+                    
+                    if(component_id[y] == -1 or component_id[y] == l+1):
+                        
+                        G1[l] += Q[x, y] * parent1[x] * parent1[y]
+                        G2[l] += Q[x, y] * parent2[x] * parent2[y]
+    
+    for x in range(size):
+        
+        l = component_id[x] 
+        
+        if(l > 0):
+            if(G1[l-1] < G2[l-1]):
+            
+                new_child[x] = parent1[x]
+            
+            else:
+            
+                new_child[x] = parent2[x]
+            
+    pb = False
+    for x in range(size):
+
+        if(int(new_child[x])  !=  int(child[x])):
+            
+            pb = True
+            
+    
+    if(pb):
+        print("pbpbpb Child")
+                        
+
+        
+        
+        
 
 @jit(nopython=True)
 def get_vect_pairwise_adj(size2,Q,list_correspondance):
@@ -143,12 +299,16 @@ if __name__ == "__main__":
     typeCrossover = args.typeCrossover
     
 
-
+    print("typeCrossover")
+    print(typeCrossover)
+    
+    
     budget = float(args.budget)
     budget_time_total = budget*3600
 
     with_logs = args.with_logs
-
+    print("with_logs : " + str(with_logs))
+    
     ######## Load graph
     nameGraph = args.nameGraph
     typeInstance = args.typeInstance
@@ -205,7 +365,7 @@ if __name__ == "__main__":
         list_correspondance, size2 = get_list_correspondance(size,Q)
         typeTabu = "doubleMove"
         
-        if(typeCrossover != "PR" and typeCrossover != "UX" and typeCrossover != "MX"):
+        if(typeCrossover != "PR" and typeCrossover != "UX" and typeCrossover != "MX" and typeCrossover != "PC"):
             typeCrossover = "XT11"
         vect_correspondance = np.array(list_correspondance)
         vect_correspondance_global_mem = cuda.to_device(np.ascontiguousarray(vect_correspondance))
@@ -215,7 +375,7 @@ if __name__ == "__main__":
     else:
         typeTabu = "singleMove"
         
-        if(typeCrossover != "PR" and typeCrossover != "UX" and typeCrossover != "MX"):
+        if(typeCrossover != "PR" and typeCrossover != "UX" and typeCrossover != "MX" and typeCrossover != "PC"):
             typeCrossover = "XT8"
 
 
@@ -292,6 +452,7 @@ if __name__ == "__main__":
 
     name_expe = "Island_UBQP" + "_" + nameGraph + "_nb_clusters_" + str(nb_clusters) + "_topology_" + topology + "_size_pop_" + str(size_pop)   + "_typeTabu_" + typeTabu + "_typeCrossover_" + typeCrossover + "_gamma_" + str(gamma)  + "_nb_iter_" + str(nb_iter_tabu) + "_nb_iter_cross_" + str(nb_iter_cross)   + "_alpha_div_" + str(alpha_div) + "_nb_neighbors_" + str(nb_neighbors) + "_nb_migrants_" + str(nb_migrants) + "_beta_" + str(beta) + "_seed_" + str(args.seed) + "_" + str(date) + ".txt"
     if(with_logs):
+        print("OKOKOKOK")
         logging.basicConfig(filename= "logs/" + name_expe + ".log",level=logging.INFO)
     #########
 
@@ -300,6 +461,16 @@ if __name__ == "__main__":
     offsprings_pop = np.zeros((size_pop, size), dtype=np.int32) # new colors generated after offspring
     fitness_pop = np.ones((size_pop), dtype=np.int32)*9999 # vector of fitness of the population
     fitness_offsprings = np.zeros((size_pop),dtype=np.int32) # vector of fitness of the offsprings
+
+    vect_nb_components  = np.zeros((size_pop), dtype=np.int32)
+    size_components = np.zeros((size_pop, size), dtype=np.int16)
+    matrix_component_id = np.zeros((size_pop, size), dtype=np.int16)
+
+    
+    
+    ####TEST
+    #component_id = np.zeros((size_pop, size), dtype=np.int32) # new colors generated after offspring
+    #component_id_gpu_memory = cuda.to_device(component_id)
 
     # Big Distance matrix with all individuals in pop and all offsprings at each generation
     matrixDistanceAll = np.zeros((nb_clusters, 2 * size_cluster, 2 * size_cluster), dtype=np.int16)
@@ -321,8 +492,12 @@ if __name__ == "__main__":
     fitness_pop_gpu_memory = cuda.to_device(fitness_pop)
     fitness_offsprings_gpu_memory = cuda.to_device(fitness_offsprings)
     
+    vect_nb_components_gpu_memory  = cuda.to_device(vect_nb_components)
+    matrix_component_id_gpu_memory  = cuda.to_device(matrix_component_id)
+    size_components_gpu_memory  = cuda.to_device(size_components)
 
-
+ 
+ 
     # data for migration
     swap_pop_iter = 1
     start_migrations = 1
@@ -376,6 +551,13 @@ if __name__ == "__main__":
     colors_pop = offsprings_pop_gpu_memory.copy_to_host()
 
 
+    #component_id = test_python_partition_crossover(size, colors_pop[0], colors_pop[1], nb_adj, vect_adj)
+
+    #print("test component_id")
+    #print(component_id)
+    
+    #verificationPython(component_id, vect_adj, nb_adj)
+    
     for epoch in range(100000):
 
 
@@ -414,7 +596,7 @@ if __name__ == "__main__":
 
         if(with_logs):
             logging.info("fitness_offsprings_after_tabu")
-            logging.info(fitness_offsprings_after_tabu)
+            #logging.info(fitness_offsprings_after_tabu)
             logging.info("Tabucol duration : " + str(time() - start))
 
         print("end tabu")
@@ -550,8 +732,8 @@ if __name__ == "__main__":
                 worst_score_pop = np.max(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
                 avg_score_pop = np.mean(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
 
-                logging.info("Pop " + str(num_cluster) + "_best : " + str(best_score_pop) + "_worst : " + str(worst_score_pop) + "_avg : " + str(avg_score_pop))
-                logging.info(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
+                #logging.info("Pop " + str(num_cluster) + "_best : " + str(best_score_pop) + "_worst : " + str(worst_score_pop) + "_avg : " + str(avg_score_pop))
+                #logging.info(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
 
 
                 matrix_distance_pop = matrixDistanceAll[num_cluster,:size_cluster, :size_cluster]
@@ -733,8 +915,8 @@ if __name__ == "__main__":
                     worst_score_pop = np.max(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
                     avg_score_pop = np.mean(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
 
-                    logging.info("Pop " + str(num_cluster) + "_best : " + str(best_score_pop) + "_worst : " + str(worst_score_pop) + "_avg : " + str(avg_score_pop))
-                    logging.info(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
+                    #logging.info("Pop " + str(num_cluster) + "_best : " + str(best_score_pop) + "_worst : " + str(worst_score_pop) + "_avg : " + str(avg_score_pop))
+                    #logging.info(fitness_pop[num_cluster * size_cluster:(num_cluster + 1) * size_cluster])
 
 
                     matrix_distance_pop = matrixDistanceAll[num_cluster,:size_cluster, :size_cluster]
@@ -831,7 +1013,109 @@ if __name__ == "__main__":
         elif (typeCrossover == "XT11"):
 
             crossovers.crossovers_numba.compute_nearest_neighbor_crossovers_XT11_cluster[blockspergrid1, threadsperblock](rng_states, size_pop, size_cluster,  nb_iter_cross, beta,  Q_global_mem, bestColor_global_mem, offsprings_pop_gpu_memory , rng_closest_individuals_gpu_memory, int(args.alpha_div) , vect_adj_global_mem, nb_adj_global_mem, vect_pairwise_adj_global_mem, nb_pairwise_adj_global_mem, vect_correspondance_global_mem)
+            
+        elif(typeCrossover == "PC"):
+            
+            
+            
+            
+            crossovers.crossovers_numba.compute_nearest_neighbor_partition_crossover[blockspergrid1, threadsperblock](rng_states, size_pop, size_cluster, bestColor_global_mem, offsprings_pop_gpu_memory, rng_closest_individuals_gpu_memory,  vect_adj_global_mem, nb_adj_global_mem, Q_global_mem, vect_nb_components_gpu_memory, matrix_component_id_gpu_memory, size_components_gpu_memory)
+            
+            vect_nb_components = vect_nb_components_gpu_memory.copy_to_host()
+            size_components = size_components_gpu_memory.copy_to_host()
+            
+            
+            max_components = np.max(vect_nb_components)
+            min_nb_components = np.min(vect_nb_components)
+            avg_nb_components = np.mean(vect_nb_components)
+            
+            logging.info("Partition crossover")
+            logging.info("avg_nb_components : " + str(avg_nb_components) + " min : " + str(min_nb_components) + " max : " + str(max_components))
+            
 
+            print("Partition crossover")
+            print("avg_nb_components : " + str(avg_nb_components) + " min : " + str(min_nb_components) + " max : " + str(max_components))
+            
+
+            max_size = np.max(size_components[size_components>0])
+            min_size = np.min(size_components[size_components>0])
+            avg_size = np.mean(size_components[size_components>0])
+            
+            logging.info("avg_size_components : " + str(avg_size) + " min : " + str(min_size) + " max : " + str(max_size))
+            
+            print("avg_size_components : " + str(avg_size) + " min : " + str(min_size) + " max : " + str(max_size))
+
+
+            #matrix_component_id = matrix_component_id_gpu_memory.copy_to_host()
+            
+            #offsprings_pop = offsprings_pop_gpu_memory.copy_to_host()
+            
+            
+            #print("verification crossover")
+            
+            #pbar = tqdm(range(size_pop))
+            
+            #for i in pbar:
+                
+                #print("verification components")
+                #verificationPython(matrix_component_id[i], vect_adj, nb_adj)
+                
+                
+                #idx1 = i
+                
+                #idx_in_pop = idx1%size_cluster
+                #num_pop = idx1//size_sub_pop
+                #idx2 = int(num_pop * size_cluster + rng_closest_individuals[num_pop,idx_in_pop,0])
+        
+                
+                #print("verification child")
+                #verification_generation_child(matrix_component_id[i], offsprings_pop[i], colors_pop[idx1], colors_pop[idx2], vect_adj, nb_adj, size, Q)
+                
+                
+                #distanceParent1 = matrixDistance1[i,i]
+                
+ 
+ 
+        blockspergrid_new = ((size_cluster * size_cluster)*nb_clusters + (threadsperblock - 1)) // threadsperblock
+            
+        distance_tools.distance_numba.computeMatrixDistance_Hamming_cluster[blockspergrid_new, threadsperblock](nb_clusters,
+                                                                                                     size_cluster,
+                                                                                                     size_cluster,
+                                                                                                     matrixDistance1_gpu_memory,
+                                                                                                     offsprings_pop_gpu_memory,
+                                                                                                     bestColor_global_mem)
+            
+        matrixDistance1 = matrixDistance1_gpu_memory.copy_to_host()
+        
+        
+        distance_child = np.zeros((size_pop))
+        for i in range(size_pop):    
+
+            idx1 = i
+            idx_in_pop = idx1%size_cluster
+            num_pop = idx1//size_sub_pop
+            idx2 = int(num_pop * size_cluster + rng_closest_individuals[num_pop,idx_in_pop,0])
+            
+            distanceParent1 =  matrixDistance1[num_pop,idx_in_pop, idx_in_pop]
+            distanceParent2 =  matrixDistance1[num_pop,idx_in_pop, int( rng_closest_individuals[num_pop,idx_in_pop,0])] 
+
+            minDist = min(distanceParent1,distanceParent2)
+            
+            distance_child[i] = minDist
+           
+           
+        max_dist = np.max(distance_child)
+        min_dist = np.min(distance_child)
+        avg_dist = np.mean(distance_child)
+        
+        logging.info("Distance child")
+        logging.info("avg_dist_child : " + str(avg_dist) + " min : " + str(min_dist) + " max : " + str(max_dist))
+        
+
+        print("Distance child")
+        print("avg_dist_child : " + str(avg_dist) + " min : " + str(min_dist) + " max : " + str(max_dist))           
+            
+            
 
         nb.cuda.synchronize()
 

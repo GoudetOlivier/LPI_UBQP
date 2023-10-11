@@ -13,6 +13,163 @@ E = -1
 
 
 @cuda.jit
+def compute_nearest_neighbor_partition_crossover(rng_states, size_pop, size_sub_pop, tColor, fils, closest_individuals,  vect_adj, vect_nb_adj, A, vect_nb_components, matrix_component_id, size_components ):
+    
+    d = cuda.grid(1)
+
+    if (d < size_pop):
+
+        idx_in_pop = d%size_sub_pop
+        num_pop = d//size_sub_pop
+
+        e = int(num_pop * size_sub_pop + closest_individuals[num_pop,idx_in_pop,0])
+
+
+        G1 = nb.cuda.local.array((size), nb.int32)
+        G2 = nb.cuda.local.array((size), nb.int32)
+        
+        
+        
+        parent1 = nb.cuda.local.array((size), nb.int8)
+        parent2 = nb.cuda.local.array((size), nb.int8)  
+
+        for j in range(size):
+            
+            parent1[j] = tColor[d, j]
+            parent2[j] = tColor[e, j]
+
+        component_id = nb.cuda.local.array((size), nb.int16)
+    
+
+        for x in range(size):
+            if(parent1[x] != parent2[x]):
+                component_id[x] = 0    
+            else:
+                component_id[x] = -1  
+                fils[d, x] = parent1[x]
+                
+                
+        
+
+        component_number = 0;
+        S = nb.cuda.local.array((size), nb.int16)
+        sizeS = -1
+        
+        
+        for x in range(size):
+            
+
+            
+            if(component_id[x] == 0):
+                
+                component_number += 1
+                component_id[x] = component_number
+                
+                sizeS += 1
+                S[sizeS] = x
+                    
+                        
+                        
+            while(sizeS > -1):
+                
+
+                j = int(S[sizeS])
+                sizeS -= 1
+
+                
+                nb_adj = int(vect_nb_adj[j])
+                
+                for k in range(nb_adj):
+                    
+                    b = int(vect_adj[j, k])
+                    
+
+                        
+                    if(component_id[b] == 0):
+                        
+                        component_id[b] = component_number
+                        
+                        sizeS += 1
+                        S[sizeS] = b
+                           
+
+                            
+        vect_nb_components[d] = component_number
+
+
+                            
+
+        for l in range(component_number):
+            
+            G1[l] = 0
+            G2[l] = 0
+            
+            
+        for x in range(size):
+                
+            if(component_id[x] > 0 ):
+                
+                l = component_id[x]
+                    
+                G1[l-1] += A[x, x] * parent1[x]
+                G2[l-1] += A[x, x] * parent2[x]
+                        
+
+                nb_adj = int(vect_nb_adj[x])
+                
+                for k in range(nb_adj):
+                        
+                    y = int(vect_adj[x, k])
+                    
+                    if component_id[y] == l :
+
+                        
+                        G1[l-1] += A[x, y] * parent1[x]*parent1[y]/2
+                        G2[l-1] += A[x, y] * parent2[x]*parent2[y]/2
+                        
+                    if component_id[y] == -1 :
+                            
+                        G1[l-1] += A[x, y] * parent1[x]*parent1[y]
+                        G2[l-1] += A[x, y] * parent2[x]*parent2[y]                        
+            
+            
+                
+        for x in range(size):
+                    
+            l = component_id[x]
+            
+            if(l > 0):
+                
+                size_components[d, l-1] += 1
+                
+                if(G1[l-1] < G2[l-1]):
+                    
+                    fils[d, x] = parent1[x]
+                    
+                else:
+                    
+                    fils[d, x] = parent2[x]
+                    
+            matrix_component_id[d,x] = component_id[x]
+                    
+
+            
+                
+
+                    
+                    
+                    
+                    
+                
+                
+        
+    
+    
+    
+    
+    
+
+@cuda.jit
 def compute_nearest_neighbor_crossovers_UX_cluster(rng_states, size_pop, size_sub_pop, tColor, fils, indices):
     d = cuda.grid(1)
 
