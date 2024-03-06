@@ -316,7 +316,7 @@ if __name__ == "__main__":
     if(typeInstance == "maxcut"):
         filename = "benchmark/" + nameGraph
     elif(typeInstance == "ubqp"): 
-        filename = "INSTANCES UBQP/" + nameGraph
+        filename = "benchmark/" + nameGraph
         
         
     parallelInsert = False
